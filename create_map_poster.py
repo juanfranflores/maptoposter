@@ -199,12 +199,15 @@ def get_coordinates(city, country):
     Includes rate limiting to be respectful to the geocoding service.
     """
     print("Looking up coordinates...")
-    geolocator = Nominatim(user_agent="city_map_poster")
+    # Increase timeout to handle slower responses from the geocoding service. 10 seconds should
+    # be sufficient for most connections. See README for details.
+    geolocator = Nominatim(user_agent="city_map_poster", timeout=10)
     
     # Add a small delay to respect Nominatim's usage policy
     time.sleep(1)
     
-    location = geolocator.geocode(f"{city}, {country}")
+    # Pass the same timeout to the geocode method to ensure consistency
+    location = geolocator.geocode(f"{city}, {country}", timeout=10)
     
     if location:
         print(f"✓ Found: {location.address}")
@@ -213,7 +216,27 @@ def get_coordinates(city, country):
     else:
         raise ValueError(f"Could not find coordinates for {city}, {country}")
 
-def create_poster(city, country, point, dist, output_file):
+def create_poster(city, country, point, dist, output_file, orientation='portrait'):
+    """
+    Generate the map poster using the provided location, distance and theme.
+
+    Parameters
+    ----------
+    city : str
+        The name of the city (used for labelling on the poster).
+    country : str
+        The country of the city (used for labelling on the poster).
+    point : tuple
+        A (latitude, longitude) tuple specifying the centre of the map.
+    dist : int
+        The radius in metres to fetch data from around the centre point.
+    output_file : str
+        Path to the PNG file where the poster will be saved.
+    orientation : str, optional
+        Page orientation for the poster. Accepts ``'portrait'`` or ``'landscape'``.
+        Defaults to ``'portrait'``. The poster is sized to A3 paper (11.69×16.54 inches)
+        with the dimensions swapped depending on orientation.
+    """
     print(f"\nGenerating map for {city}, {country}...")
     
     # Progress bar for data fetching
@@ -245,7 +268,19 @@ def create_poster(city, country, point, dist, output_file):
     
     # 2. Setup Plot
     print("Rendering map...")
-    fig, ax = plt.subplots(figsize=(12, 16), facecolor=THEME['bg'])
+    # Determine figure size for A3 paper. A3 dimensions in inches: 11.69 (short side) x 16.54 (long side).
+    # Swap dimensions if landscape orientation is requested.
+    try:
+        orient = orientation.lower()
+    except Exception:
+        orient = 'portrait'
+    # default A3 portrait dimensions
+    a3_short, a3_long = 11.69, 16.54
+    if orient == 'landscape':
+        fig_w, fig_h = a3_long, a3_short
+    else:
+        fig_w, fig_h = a3_short, a3_long
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h), facecolor=THEME['bg'])
     ax.set_facecolor(THEME['bg'])
     ax.set_position([0, 0, 1, 1])
     
@@ -362,11 +397,17 @@ Examples:
   # List themes
   python create_map_poster.py --list-themes
 
+  # Provide specific coordinates instead of geocoding (useful when geocoding fails)
+  python create_map_poster.py -c "Neuquén" -C "Argentina" --lat -38.951854 --lon -68.059178 --theme forest --distance 4000 --orientation landscape
+
 Options:
   --city, -c        City name (required)
   --country, -C     Country name (required)
   --theme, -t       Theme name (default: feature_based)
   --distance, -d    Map radius in meters (default: 29000)
+  --lat             Latitude for custom centre (overrides city search)
+  --lon             Longitude for custom centre (overrides city search)
+  --orientation, -o Poster orientation: portrait (default) or landscape
   --list-themes     List all available themes
 
 Distance guide:
@@ -420,6 +461,13 @@ Examples:
     parser.add_argument('--country', '-C', type=str, help='Country name')
     parser.add_argument('--theme', '-t', type=str, default='feature_based', help='Theme name (default: feature_based)')
     parser.add_argument('--distance', '-d', type=int, default=29000, help='Map radius in meters (default: 29000)')
+    # Optional latitude and longitude. If provided, geocoding will be bypassed.
+    parser.add_argument('--lat', type=float, help='Latitude of the map centre (optional)')
+    parser.add_argument('--lon', type=float, help='Longitude of the map centre (optional)')
+    # Orientation of the poster: portrait (default) or landscape
+    parser.add_argument('--orientation', '-o', type=str, choices=['portrait', 'landscape'], default='portrait',
+                        help='Poster orientation: portrait or landscape (default: portrait).\n'
+                             'A3 paper dimensions are used automatically. Landscape swaps width and height.')
     parser.add_argument('--list-themes', action='store_true', help='List all available themes')
     
     args = parser.parse_args()
@@ -454,11 +502,16 @@ Examples:
     # Load theme
     THEME = load_theme(args.theme)
     
-    # Get coordinates and generate poster
+    # Determine coordinates: use provided lat/lon if both are specified; otherwise geocode the city and country.
     try:
-        coords = get_coordinates(args.city, args.country)
+        if args.lat is not None and args.lon is not None:
+            coords = (args.lat, args.lon)
+            print(f"Using provided coordinates: {coords[0]}, {coords[1]}")
+        else:
+            coords = get_coordinates(args.city, args.country)
+        # Generate output filename and create the poster with orientation
         output_file = generate_output_filename(args.city, args.theme)
-        create_poster(args.city, args.country, coords, args.distance, output_file)
+        create_poster(args.city, args.country, coords, args.distance, output_file, orientation=args.orientation)
         
         print("\n" + "=" * 50)
         print("✓ Poster generation complete!")
