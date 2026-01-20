@@ -264,7 +264,7 @@ def create_poster(city, country, point, dist, output_file, orientation='portrait
     with tqdm(total=3, desc="Fetching map data", unit="step", bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt}') as pbar:
         # 1. Fetch Street Network
         pbar.set_description("Downloading street network")
-        G = ox.graph_from_bbox(north, south, east, west, network_type='all')
+        G = ox.graph_from_bbox((north, south, east, west), network_type='all')
         pbar.update(1)
         time.sleep(0.5)  # Rate limit between requests
         
@@ -272,10 +272,7 @@ def create_poster(city, country, point, dist, output_file, orientation='portrait
         pbar.set_description("Downloading water features")
         try:
             water = ox.features_from_bbox(
-                north,
-                south,
-                east,
-                west,
+                (north, south, east, west),
                 tags={'natural': 'water', 'waterway': 'riverbank'}
             )
         except:
@@ -287,10 +284,7 @@ def create_poster(city, country, point, dist, output_file, orientation='portrait
         pbar.set_description("Downloading parks/green spaces")
         try:
             parks = ox.features_from_bbox(
-                north,
-                south,
-                east,
-                west,
+                (north, south, east, west),
                 tags={'leisure': 'park', 'landuse': 'grass'}
             )
         except:
