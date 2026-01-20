@@ -257,23 +257,26 @@ def create_poster(city, country, point, dist, output_file, orientation='portrait
     else:
         dist_x = dist
         dist_y = dist / aspect_ratio
-    bbox_dist = {'north': dist_y, 'south': dist_y, 'east': dist_x, 'west': dist_x}
+    north, south, _, _ = ox.utils_geo.bbox_from_point(point, dist=dist_y)
+    _, _, east, west = ox.utils_geo.bbox_from_point(point, dist=dist_x)
     
     # Progress bar for data fetching
     with tqdm(total=3, desc="Fetching map data", unit="step", bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt}') as pbar:
         # 1. Fetch Street Network
         pbar.set_description("Downloading street network")
-        G = ox.graph_from_point(point, dist=bbox_dist, dist_type='bbox', network_type='all')
+        G = ox.graph_from_bbox(north, south, east, west, network_type='all')
         pbar.update(1)
         time.sleep(0.5)  # Rate limit between requests
         
         # 2. Fetch Water Features
         pbar.set_description("Downloading water features")
         try:
-            water = ox.features_from_point(
-                point,
-                tags={'natural': 'water', 'waterway': 'riverbank'},
-                dist=bbox_dist
+            water = ox.features_from_bbox(
+                north,
+                south,
+                east,
+                west,
+                tags={'natural': 'water', 'waterway': 'riverbank'}
             )
         except:
             water = None
@@ -283,10 +286,12 @@ def create_poster(city, country, point, dist, output_file, orientation='portrait
         # 3. Fetch Parks
         pbar.set_description("Downloading parks/green spaces")
         try:
-            parks = ox.features_from_point(
-                point,
-                tags={'leisure': 'park', 'landuse': 'grass'},
-                dist=bbox_dist
+            parks = ox.features_from_bbox(
+                north,
+                south,
+                east,
+                west,
+                tags={'leisure': 'park', 'landuse': 'grass'}
             )
         except:
             parks = None
