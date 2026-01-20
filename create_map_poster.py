@@ -238,19 +238,46 @@ def create_poster(city, country, point, dist, output_file, orientation='portrait
         with the dimensions swapped depending on orientation.
     """
     print(f"\nGenerating map for {city}, {country}...")
+
+    # Determine figure size for A3 paper. A3 dimensions in inches: 11.69 (short side) x 16.54 (long side).
+    # Use the orientation to define the aspect ratio and fetch a matching bbox so maps are not stretched.
+    try:
+        orient = orientation.lower()
+    except Exception:
+        orient = 'portrait'
+    a3_short, a3_long = 11.69, 16.54
+    if orient == 'landscape':
+        fig_w, fig_h = a3_long, a3_short
+    else:
+        fig_w, fig_h = a3_short, a3_long
+    aspect_ratio = fig_w / fig_h
+    if aspect_ratio >= 1:
+        dist_x = dist * aspect_ratio
+        dist_y = dist
+    else:
+        dist_x = dist
+        dist_y = dist / aspect_ratio
+    north, south, _, _ = ox.utils_geo.bbox_from_point(point, dist=dist_y)
+    _, _, east, west = ox.utils_geo.bbox_from_point(point, dist=dist_x)
     
     # Progress bar for data fetching
     with tqdm(total=3, desc="Fetching map data", unit="step", bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt}') as pbar:
         # 1. Fetch Street Network
         pbar.set_description("Downloading street network")
-        G = ox.graph_from_point(point, dist=dist, dist_type='bbox', network_type='all')
+        G = ox.graph_from_bbox(north, south, east, west, network_type='all')
         pbar.update(1)
         time.sleep(0.5)  # Rate limit between requests
         
         # 2. Fetch Water Features
         pbar.set_description("Downloading water features")
         try:
-            water = ox.features_from_point(point, tags={'natural': 'water', 'waterway': 'riverbank'}, dist=dist)
+            water = ox.features_from_bbox(
+                north,
+                south,
+                east,
+                west,
+                tags={'natural': 'water', 'waterway': 'riverbank'}
+            )
         except:
             water = None
         pbar.update(1)
@@ -259,7 +286,13 @@ def create_poster(city, country, point, dist, output_file, orientation='portrait
         # 3. Fetch Parks
         pbar.set_description("Downloading parks/green spaces")
         try:
-            parks = ox.features_from_point(point, tags={'leisure': 'park', 'landuse': 'grass'}, dist=dist)
+            parks = ox.features_from_bbox(
+                north,
+                south,
+                east,
+                west,
+                tags={'leisure': 'park', 'landuse': 'grass'}
+            )
         except:
             parks = None
         pbar.update(1)
@@ -268,18 +301,6 @@ def create_poster(city, country, point, dist, output_file, orientation='portrait
     
     # 2. Setup Plot
     print("Rendering map...")
-    # Determine figure size for A3 paper. A3 dimensions in inches: 11.69 (short side) x 16.54 (long side).
-    # Swap dimensions if landscape orientation is requested.
-    try:
-        orient = orientation.lower()
-    except Exception:
-        orient = 'portrait'
-    # default A3 portrait dimensions
-    a3_short, a3_long = 11.69, 16.54
-    if orient == 'landscape':
-        fig_w, fig_h = a3_long, a3_short
-    else:
-        fig_w, fig_h = a3_short, a3_long
     fig, ax = plt.subplots(figsize=(fig_w, fig_h), facecolor=THEME['bg'])
     ax.set_facecolor(THEME['bg'])
     ax.set_position([0, 0, 1, 1])
